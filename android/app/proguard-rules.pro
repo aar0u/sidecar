@@ -1,0 +1,2 @@
+-keep class com.github.aar0u.sidecar.** { *; }
+-keepclassmembers class com.github.aar0u.sidecar.** { *; }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="oktv"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_oktv"
+        android:shortcutLongLabel="@string/shortcut_oktv">
+        <intent
+            android:action="com.github.aar0u.sidecar.ACTION_LAUNCH_SERVICE"
+            android:targetPackage="com.github.aar0u.sidecar"
+            android:targetClass="com.github.aar0u.sidecar.MainActivity">
+            <extra android:name="extra_service_id" android:value="oktv" />
+        </intent>
+    </shortcut>
+</shortcuts>

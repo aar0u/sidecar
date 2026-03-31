@@ -1,0 +1,13 @@
+[
+  {
+    "id": "oktv",
+    "name": "OKTV",
+    "description": "电视/流媒体播放器",
+    "downloadUrl": "https://github.com/aar0u/deploy/releases/download/latest/tv-android.tar.gz",
+    "binaryName": "tv",
+    "args": ["web"],
+    "port": 8080,
+    "url": "http://localhost:8080",
+    "keepScreenOn": true
+  }
+]

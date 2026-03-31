@@ -1,0 +1,44 @@
+name: Release APK
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Decode keystore
+        run: echo "${{ vars.BASE64_RELEASE_JKS }}" | base64 -d > android/app/release.jks
+
+      - name: Build release APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Get current date
+        id: date
+        run: echo "short_timestamp=$(date -u +'%y%m%d')" >> $GITHUB_ENV
+
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.short_timestamp }}
+          name: "Release ${{ env.short_timestamp }}"
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/release/Sidecar.apk
+          overwrite_files: true
