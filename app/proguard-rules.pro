@@ -1,0 +1,2 @@
+-keep class com.sidecar.** { *; }
+-keepclassmembers class com.sidecar.** { *; }
