@@ -22,6 +22,13 @@ object ProcessManager {
     private val runningProcesses = ConcurrentHashMap<String, Process>()
     private val stoppedListeners = ConcurrentHashMap<String, () -> Unit>()
 
+    init {
+        Runtime.getRuntime().addShutdownHook(Thread {
+            Log.i(TAG, "JVM shutdown hook invoked, terminating all child processes...")
+            stopAll()
+        })
+    }
+
     fun isRunning(serviceId: String): Boolean {
         val p = runningProcesses[serviceId]
         return p != null && p.isAlive
@@ -53,9 +60,11 @@ object ProcessManager {
                 return@withContext Result.success(service.url)
             }
 
-            // 1. Check embedded native library first (e.g. liboktv.so)
+            // 1. Check embedded native library first (e.g. liboktv.so, liboberemote.so)
             val libName = "lib${serviceId.lowercase()}.so"
-            val embeddedBinary = File(context.applicationInfo.nativeLibraryDir, libName)
+            val libNameAlt = "lib${serviceId.lowercase().replace("-", "")}.so"
+            val embeddedBinary = File(context.applicationInfo.nativeLibraryDir, libName).takeIf { it.exists() }
+                ?: File(context.applicationInfo.nativeLibraryDir, libNameAlt)
 
             val (binaryToRun, useLinker) = if (embeddedBinary.exists()) {
                 Log.i(TAG, "Found embedded native binary: $embeddedBinary")
@@ -67,12 +76,27 @@ object ProcessManager {
                 }
 
                 val cachedBinary = File(serviceDir, service.binaryName)
-                if (!cachedBinary.exists()) {
+                if (!cachedBinary.exists() && service.downloadUrl.isNotEmpty()) {
                     onProgress("Downloading ${service.name}…")
-                    downloadAndExtract(service, serviceDir)
+                    try {
+                        downloadAndExtract(service, serviceDir)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Download failed for ${service.name}: ${e.message}")
+                    }
                 }
 
                 if (!cachedBinary.exists()) {
+                    // Graceful offline fallback to bundled assets if present
+                    val assetPath = "services/$serviceId/index.html"
+                    val hasAsset = try {
+                        context.assets.open(assetPath).close()
+                        true
+                    } catch (_: Exception) { false }
+
+                    if (hasAsset) {
+                        Log.i(TAG, "Binary unavailable, falling back to bundled asset: $assetPath")
+                        return@withContext Result.success("file:///android_asset/$assetPath")
+                    }
                     throw IOException("Binary not found after download: ${cachedBinary.absolutePath}")
                 }
                 Pair(cachedBinary, true)

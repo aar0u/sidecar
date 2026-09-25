@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.github.aar0u.sidecar.core.ConfigManager
 import com.github.aar0u.sidecar.core.ProcessManager
+import com.github.aar0u.sidecar.core.SidecarDaemonService
 import com.github.aar0u.sidecar.databinding.ActivityMainBinding
 import com.github.aar0u.sidecar.databinding.ItemServiceCardBinding
 import com.github.aar0u.sidecar.model.ServiceConfig
@@ -38,6 +39,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnRefreshConfig.setOnClickListener {
             refreshRemoteConfig(force = true)
         }
+
+        // Start daemon service to track task lifecycle & clean up processes on swipe away
+        startService(Intent(this, SidecarDaemonService::class.java))
 
         // 1. Initial display with cached or default config
         currentServices = ConfigManager.getCachedOrFallback(this)
@@ -235,5 +239,13 @@ class MainActivity : AppCompatActivity() {
                 service.keepScreenOn
             )
         )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) {
+            ProcessManager.stopAll()
+            stopService(Intent(this, SidecarDaemonService::class.java))
+        }
     }
 }

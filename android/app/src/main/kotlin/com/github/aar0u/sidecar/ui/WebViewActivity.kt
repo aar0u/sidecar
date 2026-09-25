@@ -126,6 +126,11 @@ class WebViewActivity : AppCompatActivity() {
         binding.webView.onPause()
     }
 
+    override fun onStop() {
+        super.onStop()
+        bleBridge?.stopScan()
+    }
+
     override fun onDestroy() {
         bleBridge?.destroy()
         bleBridge = null

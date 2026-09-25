@@ -50,7 +50,9 @@
   "id": "obe-remote",
   "name": "OBE Remote",
   "description": "大眼橙投影仪蓝牙遥控",
+  "downloadUrl": "https://github.com/aar0u/sidecar/releases/latest/download/obe-remote-android.tar.gz",
   "binaryName": "obe-remote",
+  "args": [],
   "port": 8081,
   "url": "http://localhost:8081",
   "keepScreenOn": true
@@ -68,12 +70,3 @@ go build -o obe-remote .
 ```
 启动后在浏览器访问 `http://localhost:8081` 即可预览遥控面板。
 
-### 方式三：CLI 脚本控制（Python 备用）
-```bash
-# 自动扫描并探测投影仪
-uv run obe_remote.py discover
-
-# 发送按键
-uv run obe_remote.py send ok
-uv run obe_remote.py on
-```

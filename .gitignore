@@ -6,6 +6,8 @@ local.properties
 *.ap_
 *.dex
 *.class
+*.so
+**/jniLibs/
 
 # IDE & Editor
 .idea/
@@ -29,6 +31,5 @@ __pycache__/
 *$py.class
 node_modules/
 
-# Local service caches & references
+# Local service caches
 .obe_device.json
-wxapkg_reference_only_to_removed_once/

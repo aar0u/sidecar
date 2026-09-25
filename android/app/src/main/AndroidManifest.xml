@@ -37,6 +37,10 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
+        <service
+            android:name=".core.SidecarDaemonService"
+            android:stopWithTask="false" />
+
     </application>
 
 </manifest>

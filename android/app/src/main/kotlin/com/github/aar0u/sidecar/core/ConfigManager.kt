@@ -38,8 +38,11 @@ object ConfigManager {
             "id": "obe-remote",
             "name": "OBE Remote",
             "description": "大眼橙投影仪蓝牙遥控",
-            "binaryName": "",
-            "url": "file:///android_asset/services/obe-remote/index.html",
+            "downloadUrl": "https://github.com/aar0u/sidecar/releases/latest/download/obe-remote-android.tar.gz",
+            "binaryName": "obe-remote",
+            "args": [],
+            "port": 8081,
+            "url": "http://localhost:8081",
             "keepScreenOn": true
         }
     ]"""
