@@ -1,9 +1,15 @@
 /**
- * OBE Remote Control Client (Sidecar BLE Web App)
+ * OBE Remote Control Client
+ * Business logic runs here and in Go backend.
+ * Hardware Bluetooth I/O relies on generic SidecarBle HAL (Kotlin).
  */
 
 (function () {
   'use strict';
+
+  // OBE Protocol Constants
+  const OBE_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
+  const OBE_CHAR_WRITE_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
 
   // Elements
   const statusBadge = document.getElementById('btn-device-status');
@@ -31,7 +37,9 @@
 
   function playHaptic() {
     try {
-      if (window.navigator && window.navigator.vibrate) {
+      if (hasNativeBridge()) {
+        window.SidecarBle.vibrate(25);
+      } else if (window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(25);
       }
     } catch (_) {}
@@ -47,34 +55,45 @@
     } catch (_) {}
   }
 
-  // Check Native Bridge
+  // Check Generic Native Driver
   const hasNativeBridge = () => typeof window.SidecarBle !== 'undefined';
 
-  // Key Send Handler
+  // Key Send Handler (Generates OBE 2-byte frame: [keyCode, action])
   function sendKey(code, keyName, holdMs = 80) {
     playHaptic();
     playAudio(true);
 
+    const intCode = parseInt(code, 10);
+    const hexCode = intCode.toString(16).padStart(2, '0');
+    const pressHex = hexCode + "00";
+    const releaseHex = hexCode + "01";
+
     if (hasNativeBridge()) {
       try {
-        window.SidecarBle.sendKey(parseInt(code, 10), holdMs);
+        // 1. Send Press Frame
+        window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, pressHex);
+
+        // 2. Send Release Frame after holdMs
+        setTimeout(() => {
+          window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, releaseHex);
+        }, holdMs);
         return;
       } catch (e) {
-        console.error('SidecarBle.sendKey error:', e);
+        console.error('SidecarBle.write error:', e);
       }
     }
 
-    // HTTP Fallback
-    fetch('/api/send', {
+    // HTTP Fallback to Go service
+    fetch('/api/frame', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: parseInt(code, 10), key: keyName, hold_ms: holdMs })
+      body: JSON.stringify({ code: intCode, key: keyName, hold_ms: holdMs })
     }).catch(err => {
-      console.warn('HTTP send fallback failed:', err);
+      console.warn('HTTP frame request failed:', err);
     });
   }
 
-  // Text Send Handler
+  // Text Send Handler (Encodes string as UTF-8 hex)
   function sendText(text) {
     if (!text || text.trim() === '') return;
     playHaptic();
@@ -82,23 +101,25 @@
 
     if (hasNativeBridge()) {
       try {
-        window.SidecarBle.sendText(text);
+        const utf8Bytes = new TextEncoder().encode(text);
+        const hexString = Array.from(utf8Bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, hexString);
         textInput.value = '';
         return;
       } catch (e) {
-        console.error('SidecarBle.sendText error:', e);
+        console.error('SidecarBle.write text error:', e);
       }
     }
 
     // HTTP Fallback
-    fetch('/api/text', {
+    fetch('/api/text-frame', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text })
     }).then(() => {
       textInput.value = '';
     }).catch(err => {
-      console.warn('HTTP send text fallback failed:', err);
+      console.warn('HTTP text-frame failed:', err);
     });
   }
 
@@ -106,35 +127,21 @@
   function startScan() {
     discoveredDevices.clear();
     renderDeviceList();
-    scanStatusText.textContent = '正在扫描中...';
+    scanStatusText.textContent = '正在扫描附近的蓝牙设备...';
     btnScan.disabled = true;
 
     if (hasNativeBridge()) {
       try {
-        window.SidecarBle.startScan();
+        // Pass OBE service UUID filter to generic scanner
+        window.SidecarBle.scan(OBE_SERVICE_UUID, 10000);
         return;
       } catch (e) {
-        console.error('SidecarBle.startScan error:', e);
+        console.error('SidecarBle.scan error:', e);
       }
     }
 
-    // HTTP Fallback
-    fetch('/api/scan', { method: 'POST' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.devices) {
-          data.devices.forEach(d => {
-            discoveredDevices.set(d.address, d);
-          });
-          renderDeviceList();
-        }
-        scanStatusText.textContent = `发现 ${discoveredDevices.size} 个设备`;
-        btnScan.disabled = false;
-      })
-      .catch(err => {
-        scanStatusText.textContent = '扫描失败: ' + err.message;
-        btnScan.disabled = false;
-      });
+    btnScan.disabled = false;
+    scanStatusText.textContent = '未检测到原生蓝牙驱动';
   }
 
   function connectDevice(address, name) {
@@ -142,19 +149,11 @@
     if (hasNativeBridge()) {
       try {
         window.SidecarBle.connect(address);
-        return;
       } catch (e) {
         console.error('SidecarBle.connect error:', e);
+        scanStatusText.textContent = '连接失败: ' + e.message;
       }
     }
-
-    fetch('/api/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: address, name: name })
-    }).catch(err => {
-      scanStatusText.textContent = '连接失败: ' + err.message;
-    });
   }
 
   function disconnectDevice() {
@@ -164,8 +163,6 @@
       } catch (e) {
         console.error('SidecarBle.disconnect error:', e);
       }
-    } else {
-      fetch('/api/disconnect', { method: 'POST' }).catch(() => {});
     }
   }
 
@@ -212,23 +209,34 @@
     }
   }
 
-  // Global Bridge Callbacks (Invoked from Kotlin SidecarBle)
-  window.onBleConnectionStateChange = function (connected, name, address) {
-    updateStatusUI(connected, name, address);
-    if (connected) {
-      deviceModal.classList.remove('show');
+  // Register Generic Driver Callbacks (Invoked from Kotlin SidecarBle)
+  window.SidecarBleCallbacks = {
+    onDeviceFound: function (name, address, rssi, uuidsJson) {
+      const lower = (name || '').toLowerCase();
+      const isObe = lower.includes('obe') || lower.includes('orange') || lower.includes('大眼橙') ||
+                    (uuidsJson && uuidsJson.toLowerCase().includes('fff0'));
+      if (isObe || name) {
+        discoveredDevices.set(address, {
+          name: name || '大眼橙投影仪',
+          address: address,
+          rssi: rssi
+        });
+        renderDeviceList();
+        scanStatusText.textContent = `发现 ${discoveredDevices.size} 个设备`;
+      }
+    },
+
+    onScanFinished: function () {
+      btnScan.disabled = false;
+      scanStatusText.textContent = `扫描完成，发现 ${discoveredDevices.size} 个设备`;
+    },
+
+    onConnectionStateChange: function (connected, name, address) {
+      updateStatusUI(connected, name, address);
+      if (connected) {
+        deviceModal.classList.remove('show');
+      }
     }
-  };
-
-  window.onBleDeviceFound = function (name, address, rssi) {
-    discoveredDevices.set(address, { name: name || '大眼橙投影仪', address: address, rssi: rssi });
-    renderDeviceList();
-    scanStatusText.textContent = `发现 ${discoveredDevices.size} 个设备`;
-  };
-
-  window.onBleScanFinished = function () {
-    btnScan.disabled = false;
-    scanStatusText.textContent = `扫描完成，发现 ${discoveredDevices.size} 个设备`;
   };
 
   // Wire Key Buttons
@@ -237,7 +245,6 @@
     const code = btn.dataset.code;
     const keyName = btn.dataset.key;
 
-    // Pointer events for instant tactile response
     btn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       btn.classList.add('pressed');
@@ -326,7 +333,7 @@
     }
   });
 
-  // Initial Sync Status with Native Bridge or HTTP
+  // Initial Sync Status with Native Driver
   setTimeout(() => {
     if (hasNativeBridge()) {
       try {
@@ -334,6 +341,11 @@
         if (statusJson) {
           const s = JSON.parse(statusJson);
           updateStatusUI(s.connected, s.name, s.address);
+
+          // Auto-reconnect last device if saved
+          if (!s.connected && s.lastAddress) {
+            connectDevice(s.lastAddress, s.lastName);
+          }
         }
       } catch (e) {
         console.warn('Initial getStatus failed:', e);

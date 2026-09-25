@@ -1,27 +1,59 @@
 # Sidecar
 
-A configuration-driven Android companion runner to host background binaries and access their web interfaces in full-screen WebViews.
+A configuration-driven Android companion runner and service monorepo to host background binaries and access their web interfaces in full-screen WebViews.
 
 [![Release](https://github.com/aar0u/sidecar/actions/workflows/release.yml/badge.svg)](https://github.com/aar0u/sidecar/actions/workflows/release.yml)
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    GH[GitHub: services.json] -->|Fetch / Refresh| App[Sidecar App]
-    App --> List[Service Cards & App Shortcuts]
-    List -->|Launch| PM[ProcessManager]
-    PM --> Check{Cached?}
-    Check -->|No| DL[Download & Extract]
-    DL --> Run
-    Check -->|Yes| Run[Launch via linker64]
-    Run --> Probe[HTTP Probe localhost:PORT]
-    Probe -->|Ready| WV[Full-screen WebView]
+```
+                      ┌──────────────────────────────────────────────┐
+                      │             Sidecar Monorepo                 │
+                      ├──────────────────────┬───────────────────────┤
+                      │   android/ (Host)    │   services/ (Backends)│
+                      └──────────┬───────────┴───────────┬───────────┘
+                                 │                       │
+      ┌──────────────────────────▼───────────────────────▼──────────────┐
+      │  GitHub / Remote: services.json                                 │
+      └──────────────────────────┬──────────────────────────────────────┘
+                                 │ Fetch & Refresh
+      ┌──────────────────────────▼──────────────────────────────────────┐
+      │  Sidecar Android App                                            │
+      │  - Dynamic Service Cards & Home Screen Shortcuts                │
+      │  - ProcessManager: Downloads & executes services via linker64   │
+      │  - Full-screen WebView Container with KeepScreenOn              │
+      ├─────────────────────────────────────────────────────────────────┤
+      │  Generic Hardware HAL (Kotlin)                                  │
+      │  - window.SidecarBle: Generic Bluetooth Low Energy Driver       │
+      │  - Zero device-specific code in Android; pure hardware bridge   │
+      └──────────────────────────┬──────────────────────────────────────┘
+                                 │
+                 ┌───────────────┴───────────────┐
+                 │                               │
+        ┌────────▼─────────┐            ┌────────▼─────────┐
+        │  services/oktv   │            │ services/obe-remote│
+        │  Streaming TV    │            │ OBE Projector BLE│
+        │  (Go Web App)    │            │ Remote (Go + Web)│
+        └──────────────────┘            └──────────────────┘
+```
+
+## Directory Structure
+
+```
+sidecar/
+├── android/            # Android companion host app (Kotlin + Coroutines + ViewBinding)
+│   ├── app/            # Main application module with generic hardware HAL
+│   └── gradle/         # Gradle wrapper
+├── services/           # Backend services
+│   ├── obe-remote/     # OBE Projector BLE remote control (Go backend + Web UI)
+│   └── ...             # Future services (Go / Web)
+├── services.json       # Central service configuration catalog
+└── .github/workflows/  # CI/CD Release automation
 ```
 
 ## Configuration (`services.json`)
 
-Define services in a remote JSON file (e.g. hosted on GitHub). No Android app updates needed when adding new services.
+Define services in a remote JSON file (hosted on GitHub or local server). New services can be added without updating the Android host app.
 
 ```json
 [
@@ -35,30 +67,49 @@ Define services in a remote JSON file (e.g. hosted on GitHub). No Android app up
     "port": 8080,
     "url": "http://localhost:8080",
     "keepScreenOn": true
+  },
+  {
+    "id": "obe-remote",
+    "name": "OBE Remote",
+    "description": "大眼橙投影仪蓝牙遥控",
+    "binaryName": "obe-remote",
+    "port": 8081,
+    "url": "http://localhost:8081",
+    "keepScreenOn": true
   }
 ]
 ```
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `id` | `string` | Unique identifier (used for isolated storage directory). |
+| `id` | `string` | Unique service identifier (used for isolated storage directory). |
 | `name` | `string` | Display name for cards and home screen shortcuts. |
 | `description`| `string` | Short description. |
-| `downloadUrl`| `string` | URL to `.tar.gz` archive or binary. |
+| `downloadUrl`| `string` | URL to `.tar.gz` archive or binary (optional for built-in services). |
 | `binaryName` | `string` | Executable filename after extraction. |
 | `args` | `array` | Arguments passed to the executable. |
 | `port` | `integer`| Port for HTTP health probing. |
 | `url` | `string` | Web interface URL loaded into the WebView. |
 | `keepScreenOn`| `boolean`| Keeps the display on while viewing this service. |
 
-## Notes
+## Hardware Abstraction Layer (HAL)
 
-* **Binary Execution**: Downloaded binaries are executed via `/system/bin/linker64` inside the app's private files directory. If an embedded binary (`lib<id>.so`) is packaged in `jniLibs/arm64-v8a/`, it is executed directly from `nativeLibraryDir`.
-* **App Shortcuts**: Services appear in the home screen long-press popup menu for one-tap direct access.
-* **Offline Support**: The remote configuration is cached locally; previously downloaded services run without an internet connection.
+Sidecar provides generic, reusable hardware bridges to WebView interfaces so services can remain pure Go/Web without handling Android JNI or OS permissions:
+
+- **`window.SidecarBle`**:
+  - `scan(filterUuid, timeoutMs)`: Scans for nearby BLE peripherals.
+  - `connect(address)` / `disconnect()`: Connects to GATT server and handles lifecycle.
+  - `write(serviceUuid, charUuid, hexData)`: Writes raw bytes to any characteristic.
+  - `read(serviceUuid, charUuid)`: Reads characteristic value.
+  - `setNotification(serviceUuid, charUuid, enable)`: Subscribes to GATT notifications.
+  - `vibrate(durationMs)`: Device haptic feedback.
 
 ## Build
 
 ```bash
+# Build Android release APK
 cd android && ./gradlew assembleRelease
+
+# Build a service (e.g. obe-remote)
+cd services/obe-remote && go build -o obe-remote .
 ```
