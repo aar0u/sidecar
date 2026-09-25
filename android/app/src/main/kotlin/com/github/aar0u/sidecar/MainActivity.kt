@@ -131,7 +131,26 @@ class MainActivity : AppCompatActivity() {
     private fun bindServiceCard(card: ItemServiceCardBinding, service: ServiceConfig) {
         card.tvName.text = service.name
         card.tvDesc.text = service.description.ifEmpty { "No description" }
-        card.tvMeta.text = "Port: ${service.port} | Binary: ${service.binaryName}"
+
+        val isBuiltIn = service.binaryName.isEmpty() || service.url.startsWith("file://")
+        card.tvMeta.text = if (isBuiltIn) "Built-in Service" else "Port: ${service.port} | Binary: ${service.binaryName}"
+
+        if (isBuiltIn) {
+            card.tvStatus.text = "READY"
+            card.tvStatus.setBackgroundResource(R.drawable.bg_status_running)
+            card.tvStatus.setTextColor(Color.parseColor("#34C759"))
+
+            card.btnStart.visibility = View.VISIBLE
+            card.btnStart.isEnabled = true
+            card.btnStart.text = "Open"
+            card.btnOpen.visibility = View.GONE
+            card.btnStop.visibility = View.GONE
+
+            card.btnStart.setOnClickListener {
+                openWebView(service)
+            }
+            return
+        }
 
         val isRunning = ProcessManager.isRunning(service.id)
 

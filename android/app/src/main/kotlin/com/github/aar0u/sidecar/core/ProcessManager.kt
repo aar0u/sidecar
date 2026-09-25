@@ -47,6 +47,12 @@ object ProcessManager {
                 return@withContext Result.success(service.url)
             }
 
+            // Built-in Web service without background daemon process
+            if (service.binaryName.isEmpty() || service.url.startsWith("file://")) {
+                Log.d(TAG, "Service $serviceId is a built-in web service, launching: ${service.url}")
+                return@withContext Result.success(service.url)
+            }
+
             // 1. Check embedded native library first (e.g. liboktv.so)
             val libName = "lib${serviceId.lowercase()}.so"
             val embeddedBinary = File(context.applicationInfo.nativeLibraryDir, libName)
@@ -72,7 +78,7 @@ object ProcessManager {
                 Pair(cachedBinary, true)
             }
 
-            binary.setExecutable(true, false)
+            binaryToRun.setExecutable(true, false)
             onProgress("Starting ${service.name} service…")
             startProcess(context, service, binaryToRun, useLinker)
 

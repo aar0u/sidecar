@@ -13,4 +13,17 @@
             <extra android:name="extra_service_id" android:value="oktv" />
         </intent>
     </shortcut>
+    <shortcut
+        android:shortcutId="obe-remote"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_obe_remote"
+        android:shortcutLongLabel="@string/shortcut_obe_remote">
+        <intent
+            android:action="com.github.aar0u.sidecar.ACTION_LAUNCH_SERVICE"
+            android:targetPackage="com.github.aar0u.sidecar"
+            android:targetClass="com.github.aar0u.sidecar.MainActivity">
+            <extra android:name="extra_service_id" android:value="obe-remote" />
+        </intent>
+    </shortcut>
 </shortcuts>

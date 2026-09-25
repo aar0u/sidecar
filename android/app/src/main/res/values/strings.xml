@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Sidecar</string>
     <string name="shortcut_oktv">OKTV</string>
+    <string name="shortcut_obe_remote">OBE 遥控</string>
 </resources>

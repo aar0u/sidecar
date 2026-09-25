@@ -1,21 +1,34 @@
-*.iml
-.gradle
+# Gradle & Android Build
+.gradle/
 build/
 local.properties
-.DS_Store
+*.apk
+*.ap_
+*.dex
+*.class
+
+# IDE & Editor
 .idea/
-captures/
-.externalNativeBuild/
-.cxx/
-bin/
-gen/
-out/
-proguard/
-*.log
+*.iml
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Signing
 *.jks
-.navigation/
-freeline.py
-freeline/
-freeline_project_description.json
-fastlane/
+*.keystore
+
+# Logs & Diagnostics
+*.log
+captures/
 lint/
+
+# Python & Node
+__pycache__/
+*.py[cod]
+*$py.class
+node_modules/
+
+# Local service caches & references
+.obe_device.json
+wxapkg_reference_only_to_removed_once/

@@ -12,9 +12,12 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import com.github.aar0u.sidecar.ble.ObeBleBridge
 import com.github.aar0u.sidecar.databinding.ActivityWebviewBinding
 
 class WebViewActivity : AppCompatActivity() {
+
+    private var bleBridge: ObeBleBridge? = null
 
     companion object {
         const val EXTRA_URL = "extra_url"
@@ -77,6 +80,13 @@ class WebViewActivity : AppCompatActivity() {
                 binding.webView.visibility = View.VISIBLE
             }
         }
+
+        val bridge = ObeBleBridge(this, binding.webView)
+        bleBridge = bridge
+        binding.webView.addJavascriptInterface(bridge, "SidecarBle")
+        if (!bridge.hasPermissions()) {
+            bridge.requestPermissions()
+        }
     }
 
     private fun setupBackNavigation() {
@@ -117,7 +127,9 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        bleBridge?.destroy()
+        bleBridge = null
         binding.webView.destroy()
+        super.onDestroy()
     }
 }

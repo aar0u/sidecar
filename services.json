@@ -9,5 +9,13 @@
     "port": 8080,
     "url": "http://localhost:8080",
     "keepScreenOn": true
+  },
+  {
+    "id": "obe-remote",
+    "name": "OBE Remote",
+    "description": "大眼橙投影仪蓝牙遥控",
+    "binaryName": "",
+    "url": "file:///android_asset/services/obe-remote/index.html",
+    "keepScreenOn": true
   }
 ]
