@@ -21,7 +21,7 @@ A configuration-driven Android companion runner and service monorepo to host bac
       │  Sidecar Android App                                            │
       │  - Dynamic Service Cards & Home Screen Shortcuts                │
       │  - ProcessManager: Downloads & executes services via linker64   │
-      │  - Full-screen WebView Container with KeepScreenOn              │
+      │  - Full-screen WebView Container                                │
       ├─────────────────────────────────────────────────────────────────┤
       │  Generic Hardware HAL (Kotlin)                                  │
       │  - window.SidecarBle: Generic Bluetooth Low Energy Driver       │
@@ -66,7 +66,6 @@ Define services in a remote JSON file (hosted on GitHub or local server). New se
     "args": ["web"],
     "port": 8080,
     "url": "http://localhost:8080",
-    "keepScreenOn": true,
     "keepAlive": true
   },
   {
@@ -78,7 +77,6 @@ Define services in a remote JSON file (hosted on GitHub or local server). New se
     "args": [],
     "port": 8081,
     "url": "http://localhost:8081",
-    "keepScreenOn": true,
     "keepAlive": false
   }
 ]
@@ -94,7 +92,6 @@ Define services in a remote JSON file (hosted on GitHub or local server). New se
 | `args` | `array` | Arguments passed to the executable. |
 | `port` | `integer`| Port for HTTP health probing. |
 | `url` | `string` | Web interface URL loaded into the WebView. |
-| `keepScreenOn`| `boolean`| Keeps the display on while viewing this service. |
 | `keepAlive`   | `boolean`| If `false` (default, Mode 1), automatically stops process on Web UI exit. If `true` (Mode 2), promotes to an Android Foreground Service with a persistent status bar notification to survive app switching. |
 
 ## Hardware Abstraction Layer (HAL)

@@ -39,7 +39,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: env(safe-area-inset-top, 16px) 24px env(safe-area-inset-bottom, 16px);
+  padding: max(16px, env(safe-area-inset-top, 16px)) 24px max(24px, env(safe-area-inset-bottom, 16px));
   position: relative;
 }
 

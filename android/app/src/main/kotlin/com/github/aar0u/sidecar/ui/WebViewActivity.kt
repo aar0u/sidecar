@@ -12,6 +12,7 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.github.aar0u.sidecar.ble.BleBridge
 import com.github.aar0u.sidecar.databinding.ActivityWebviewBinding
 
@@ -22,7 +23,6 @@ class WebViewActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_URL = "extra_url"
         const val EXTRA_TITLE = "extra_title"
-        const val EXTRA_KEEP_SCREEN_ON = "extra_keep_screen_on"
         const val EXTRA_SERVICE_ID = "extra_service_id"
         const val EXTRA_KEEP_ALIVE = "extra_keep_alive"
 
@@ -30,13 +30,11 @@ class WebViewActivity : AppCompatActivity() {
             context: Context,
             url: String,
             title: String,
-            keepScreenOn: Boolean = true,
             serviceId: String? = null,
             keepAlive: Boolean = false
         ): Intent = Intent(context, WebViewActivity::class.java).apply {
             putExtra(EXTRA_URL, url)
             putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_KEEP_SCREEN_ON, keepScreenOn)
             putExtra(EXTRA_SERVICE_ID, serviceId)
             putExtra(EXTRA_KEEP_ALIVE, keepAlive)
         }
@@ -49,11 +47,6 @@ class WebViewActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityWebviewBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        val keepScreenOn = intent.getBooleanExtra(EXTRA_KEEP_SCREEN_ON, true)
-        if (keepScreenOn) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
 
         setupWebView()
         setupBackNavigation()
@@ -84,6 +77,7 @@ class WebViewActivity : AppCompatActivity() {
                 binding.progressBar.visibility = View.GONE
                 binding.tvStatus.visibility = View.GONE
                 binding.webView.visibility = View.VISIBLE
+                applyStatusBarStyleFromPage(view)
             }
         }
 
@@ -92,6 +86,25 @@ class WebViewActivity : AppCompatActivity() {
         binding.webView.addJavascriptInterface(bridge, "SidecarBle")
         if (!bridge.hasPermissions()) {
             bridge.requestPermissions()
+        }
+    }
+
+    // Mirrors how browsers theme their own chrome from a page's declared <meta name="theme-color">,
+    // so Sidecar never has to hardcode which services are light/dark in services.json.
+    private fun applyStatusBarStyleFromPage(view: WebView?) {
+        view?.evaluateJavascript(
+            "(function(){var m=document.querySelector('meta[name=\"theme-color\"]');return m?m.content:'';})();"
+        ) { result ->
+            val colorText = result?.trim('"')?.takeIf { it.isNotEmpty() && it != "null" } ?: return@evaluateJavascript
+            val color = runCatching { android.graphics.Color.parseColor(colorText) }.getOrNull() ?: return@evaluateJavascript
+            val luminance = (0.299 * android.graphics.Color.red(color) +
+                0.587 * android.graphics.Color.green(color) +
+                0.114 * android.graphics.Color.blue(color)) / 255
+            val lightBackground = luminance > 0.5
+            WindowInsetsControllerCompat(window, binding.root).apply {
+                isAppearanceLightStatusBars = lightBackground
+                isAppearanceLightNavigationBars = lightBackground
+            }
         }
     }
 
@@ -140,6 +153,7 @@ class WebViewActivity : AppCompatActivity() {
     override fun onDestroy() {
         val serviceId = intent.getStringExtra(EXTRA_SERVICE_ID)
         val keepAlive = intent.getBooleanExtra(EXTRA_KEEP_ALIVE, false)
+        android.util.Log.i("WebViewActivity", "onDestroy: serviceId=$serviceId, keepAlive=$keepAlive")
         if (!serviceId.isNullOrEmpty() && !keepAlive) {
             android.util.Log.i("WebViewActivity", "Service $serviceId is keepAlive=false, stopping process on Web UI exit...")
             com.github.aar0u.sidecar.core.ProcessManager.stop(serviceId)

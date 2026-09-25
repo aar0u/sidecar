@@ -51,8 +51,8 @@ class SidecarDaemonService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to start foreground service", e)
+            } catch (e: Throwable) {
+                Log.e(TAG, "startForegroundService call FAILED (${e.javaClass.name}): ${e.message}", e)
             }
         }
 
@@ -157,10 +157,15 @@ class SidecarDaemonService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            Log.i(TAG, "startForeground succeeded for ${activeServices.keys}")
+        } catch (e: Throwable) {
+            Log.e(TAG, "startForeground FAILED (${e.javaClass.name}): ${e.message}", e)
         }
     }
 
@@ -189,11 +194,14 @@ class SidecarDaemonService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Log.i(TAG, "Task removed (swiped away from Recents). Terminating all child service processes...")
-        ProcessManager.stopAll()
-        activeServices.clear()
-        removeForeground()
-        stopSelf()
+        if (activeServices.isEmpty()) {
+            Log.i(TAG, "Task removed (swiped away from Recents). No keepAlive services active, terminating all child processes...")
+            ProcessManager.stopAll()
+            removeForeground()
+            stopSelf()
+        } else {
+            Log.i(TAG, "Task removed (swiped away from Recents). Keeping ${activeServices.size} keepAlive service(s) running in background.")
+        }
     }
 
     override fun onDestroy() {

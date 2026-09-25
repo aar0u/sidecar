@@ -15,4 +15,16 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <!-- MainActivity is not edge-to-edge (fitsSystemWindows) and has a fixed colorSurface
+         toolbar, so its status/nav bar can be tinted to match declaratively, same as any
+         pre-edge-to-edge Android screen with an app bar. WebViewActivity stays on the base
+         theme since its background varies per loaded service page (see WebViewActivity's
+         theme-color detection). -->
+    <style name="Theme.Sidecar.Main" parent="Theme.Sidecar">
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
 </resources>

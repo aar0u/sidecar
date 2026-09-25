@@ -63,7 +63,11 @@ jobs:
         with:
           tag_name: ${{ env.short_timestamp }}
           name: "Release ${{ env.short_timestamp }}"
-          generate_release_notes: true
+          body: |
+            Automated build for ${{ env.short_timestamp }} (${{ github.sha }}).
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ env.short_timestamp }}
+          append_body: false
           make_latest: true
           files: |
             android/app/build/outputs/apk/release/Sidecar.apk

@@ -6,9 +6,7 @@ import com.github.aar0u.sidecar.model.ServiceConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -22,33 +20,6 @@ object ConfigManager {
     const val DEFAULT_REMOTE_URL =
         "https://raw.githubusercontent.com/aar0u/sidecar/main/services.json"
 
-    private const val FALLBACK_JSON = """[
-        {
-            "id": "oktv",
-            "name": "OKTV",
-            "description": "电视/流媒体播放器",
-            "downloadUrl": "https://github.com/aar0u/deploy/releases/download/latest/tv-android.tar.gz",
-            "binaryName": "tv",
-            "args": ["web"],
-            "port": 8080,
-            "url": "http://localhost:8080",
-            "keepScreenOn": true,
-            "keepAlive": true
-        },
-        {
-            "id": "obe-remote",
-            "name": "OBE Remote",
-            "description": "大眼橙投影仪蓝牙遥控",
-            "downloadUrl": "https://github.com/aar0u/sidecar/releases/latest/download/obe-remote-android.tar.gz",
-            "binaryName": "obe-remote",
-            "args": [],
-            "port": 8081,
-            "url": "http://localhost:8081",
-            "keepScreenOn": true,
-            "keepAlive": false
-        }
-    ]"""
-
     fun getConfigUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(KEY_CUSTOM_CONFIG_URL, DEFAULT_REMOTE_URL) ?: DEFAULT_REMOTE_URL
@@ -59,25 +30,36 @@ object ConfigManager {
         prefs.edit().putString(KEY_CUSTOM_CONFIG_URL, url).apply()
     }
 
-    fun getCachedOrFallback(context: Context): List<ServiceConfig> {
+    fun getCachedConfig(context: Context): List<ServiceConfig> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val cached = prefs.getString(KEY_CACHED_CONFIG, null)
-        if (cached != null) {
-            runCatching { return parseJson(cached) }
-                .onFailure { Log.w(TAG, "Failed to parse cached config, using fallback", it) }
+        if (!cached.isNullOrEmpty()) {
+            val list = runCatching { parseJson(cached) }.getOrNull()
+            if (!list.isNullOrEmpty()) {
+                return list
+            }
         }
-        return runCatching { parseJson(FALLBACK_JSON) }.getOrDefault(emptyList())
+        return emptyList()
     }
 
-    suspend fun loadServices(context: Context, forceRefresh: Boolean = false): Result<List<ServiceConfig>> =
+    suspend fun loadServices(context: Context): Result<List<ServiceConfig>> =
         withContext(Dispatchers.IO) {
-            val configUrl = getConfigUrl(context)
+            val baseConfigUrl = getConfigUrl(context)
+            // raw.githubusercontent.com is served through a CDN that ignores client Cache-Control
+            // headers, so a unique query param is the only reliable way to force a fresh fetch.
+            val configUrl = if (baseConfigUrl.contains("?")) {
+                "$baseConfigUrl&_t=${System.currentTimeMillis()}"
+            } else {
+                "$baseConfigUrl?_t=${System.currentTimeMillis()}"
+            }
             try {
                 Log.d(TAG, "Fetching services config from: $configUrl")
                 val conn = (URL(configUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 8_000
                     readTimeout = 10_000
-                    useCaches = !forceRefresh
+                    useCaches = false
+                    setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate")
+                    setRequestProperty("Pragma", "no-cache")
                 }
 
                 val responseCode = conn.responseCode
@@ -86,7 +68,9 @@ object ConfigManager {
                     val list = parseJson(jsonStr)
 
                     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    prefs.edit().putString(KEY_CACHED_CONFIG, jsonStr).apply()
+                    prefs.edit()
+                        .putString(KEY_CACHED_CONFIG, jsonStr)
+                        .apply()
 
                     Result.success(list)
                 } else {

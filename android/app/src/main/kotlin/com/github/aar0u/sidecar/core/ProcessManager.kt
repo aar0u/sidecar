@@ -29,6 +29,11 @@ object ProcessManager {
         })
     }
 
+    // onProgress callbacks typically touch UI views; always dispatch on Main regardless of caller context.
+    private suspend fun report(onProgress: suspend (String) -> Unit, message: String) {
+        withContext(Dispatchers.Main) { onProgress(message) }
+    }
+
     fun isRunning(serviceId: String): Boolean {
         val p = runningProcesses[serviceId]
         return p != null && p.isAlive
@@ -68,7 +73,7 @@ object ProcessManager {
 
             val (binaryToRun, useLinker) = if (embeddedBinary.exists()) {
                 Log.i(TAG, "Found embedded native binary: $embeddedBinary")
-                onProgress("Starting embedded ${service.name}…")
+                report(onProgress, "Starting embedded ${service.name}…")
                 Pair(embeddedBinary, false)
             } else {
                 val serviceDir = File(File(context.filesDir, "services"), serviceId).apply {
@@ -77,7 +82,7 @@ object ProcessManager {
 
                 val cachedBinary = File(serviceDir, service.binaryName)
                 if (!cachedBinary.exists() && service.downloadUrl.isNotEmpty()) {
-                    onProgress("Downloading ${service.name}…")
+                    report(onProgress, "Downloading ${service.name}…")
                     try {
                         downloadAndExtract(service, serviceDir)
                     } catch (e: Exception) {
@@ -86,23 +91,12 @@ object ProcessManager {
                 }
 
                 if (!cachedBinary.exists()) {
-                    // Graceful offline fallback to bundled assets if present
-                    val assetPath = "services/$serviceId/index.html"
-                    val hasAsset = try {
-                        context.assets.open(assetPath).close()
-                        true
-                    } catch (_: Exception) { false }
-
-                    if (hasAsset) {
-                        Log.i(TAG, "Binary unavailable, falling back to bundled asset: $assetPath")
-                        return@withContext Result.success("file:///android_asset/$assetPath")
-                    }
-                    throw IOException("Binary not found after download: ${cachedBinary.absolutePath}")
+                    throw IOException("Binary not found: ${cachedBinary.absolutePath}")
                 }
                 Pair(cachedBinary, true)
             }
 
-            onProgress("Starting ${service.name} service…")
+            report(onProgress, "Starting ${service.name} service…")
             startProcess(context, service, binaryToRun, useLinker)
 
             // Probe target HTTP port
@@ -167,6 +161,10 @@ object ProcessManager {
         val serviceId = service.id
         val workDir = File(File(context.filesDir, "services"), serviceId).apply {
             if (!exists()) mkdirs()
+        }
+
+        if (service.requiresBootstrapConfig) {
+            BootstrapConfigManager.writeConfigFile(context, service, workDir)
         }
 
         val cmd = mutableListOf<String>()
@@ -250,5 +248,33 @@ object ProcessManager {
 
     fun stopAll() {
         runningProcesses.keys().toList().forEach(::stop)
+    }
+
+    suspend fun redownload(
+        context: Context,
+        service: ServiceConfig,
+        onProgress: suspend (String) -> Unit
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val serviceId = service.id
+        try {
+            stop(serviceId)
+            val serviceDir = File(File(context.filesDir, "services"), serviceId).apply {
+                if (!exists()) mkdirs()
+            }
+            val cachedBinary = File(serviceDir, service.binaryName)
+            if (cachedBinary.exists()) {
+                cachedBinary.delete()
+            }
+            report(onProgress, "Downloading ${service.name}…")
+            downloadAndExtract(service, serviceDir)
+            if (!cachedBinary.exists()) {
+                throw IOException("Binary not found after download: ${cachedBinary.absolutePath}")
+            }
+            cachedBinary.setExecutable(true, false)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Redownload failed for $serviceId", e)
+            Result.failure(e)
+        }
     }
 }

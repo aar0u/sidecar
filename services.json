@@ -8,8 +8,8 @@
     "args": ["web"],
     "port": 8080,
     "url": "http://localhost:8080",
-    "keepScreenOn": true,
-    "keepAlive": true
+    "keepAlive": true,
+    "requiresBootstrapConfig": true
   },
   {
     "id": "obe-remote",
@@ -20,7 +20,6 @@
     "args": [],
     "port": 8081,
     "url": "http://localhost:8081",
-    "keepScreenOn": true,
     "keepAlive": false
   }
 ]
