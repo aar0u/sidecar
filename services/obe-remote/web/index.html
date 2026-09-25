@@ -21,7 +21,7 @@
       </button>
     </header>
 
-    <!-- Top Functional Row (Power & Focus) -->
+    <!-- Top Functional Row (Power & Settings) -->
     <section class="top-row">
       <button class="key-btn key-power" id="key-power" data-code="26" data-key="power" title="电源 (开/待机)">
         <img src="assets/images/btn_power_normal.png" alt="电源" class="btn-img normal">
@@ -32,9 +32,9 @@
         点击右上角连接设备
       </div>
 
-      <button class="key-btn key-focus" id="key-focus" data-code="131" data-key="focus" title="自动对焦">
-        <img src="assets/images/ic_focus_f_normal.png" alt="自动对焦" class="btn-img normal">
-        <img src="assets/images/ic_focus_f_pressed.png" alt="对焦按下" class="btn-img pressed">
+      <button class="key-btn key-settings" id="key-settings" data-code="172" data-key="settings" title="设置">
+        <img src="assets/images/btn_off_normal.png" alt="设置" class="btn-img normal">
+        <img src="assets/images/btn_on_pressed.png" alt="设置按下" class="btn-img pressed">
       </button>
     </section>
 
@@ -91,15 +91,15 @@
         </button>
       </div>
 
-      <!-- Row 2: Vol-, Settings, Vol+ -->
+      <!-- Row 2: Vol-, Focus, Vol+ -->
       <div class="control-row">
         <button class="key-btn" id="key-vol-down" data-code="25" data-key="vol_down" title="音量减">
           <img src="assets/images/btn_volume_down_normal.png" alt="音量减" class="btn-img normal">
           <img src="assets/images/btn_volume_down_pressed.png" alt="音量减按下" class="btn-img pressed">
         </button>
-        <button class="key-btn" id="key-settings" data-code="172" data-key="settings" title="设置">
-          <img src="assets/images/btn_off_normal.png" alt="设置" class="btn-img normal">
-          <img src="assets/images/btn_on_pressed.png" alt="设置按下" class="btn-img pressed">
+        <button class="key-btn key-focus" id="key-focus" data-code="131" data-key="focus" title="自动对焦">
+          <img src="assets/images/ic_focus_f_normal.png" alt="自动对焦" class="btn-img normal">
+          <img src="assets/images/ic_focus_f_pressed.png" alt="对焦按下" class="btn-img pressed">
         </button>
         <button class="key-btn" id="key-vol-up" data-code="24" data-key="vol_up" title="音量加">
           <img src="assets/images/btn_volume_up_normal.png" alt="音量加" class="btn-img normal">
@@ -107,14 +107,6 @@
         </button>
       </div>
     </section>
-
-    <!-- Bottom Input & Extra Actions -->
-    <footer class="remote-footer">
-      <div class="text-input-bar">
-        <input type="text" id="text-input" placeholder="向投影仪输入文字..." autocomplete="off">
-        <button id="btn-send-text" class="btn-send">发送</button>
-      </div>
-    </footer>
   </div>
 
   <!-- Device Discovery & Connection Modal -->
@@ -125,6 +117,10 @@
         <button id="btn-close-modal" class="btn-close" aria-label="关闭">&times;</button>
       </div>
       <div class="modal-body">
+        <div id="current-device-bar" class="current-device-bar" hidden>
+          <span id="current-device-text"></span>
+          <button id="btn-disconnect" class="btn-secondary">断开连接</button>
+        </div>
         <div class="scan-action-bar">
           <button id="btn-scan" class="btn-primary">开始扫描</button>
           <span id="scan-status-text" class="scan-status">未扫描</span>
@@ -135,9 +131,6 @@
       </div>
     </div>
   </div>
-
-  <audio id="audio-success" src="assets/audio/success.mp3" preload="auto"></audio>
-  <audio id="audio-fail" src="assets/audio/fail01.wav" preload="auto"></audio>
 
   <script src="app.js"></script>
 </body>

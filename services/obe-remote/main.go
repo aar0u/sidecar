@@ -73,10 +73,6 @@ type FrameRequest struct {
 	Repeat  int    `json:"repeat"`
 }
 
-type TextFrameRequest struct {
-	Text string `json:"text"`
-}
-
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -177,29 +173,7 @@ func main() {
 		})
 	})
 
-	// 4. Text Frame Generator API
-	mux.HandleFunc("/api/text-frame", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		var req TextFrameRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON: " + err.Error()})
-			return
-		}
-
-		rawBytes := []byte(req.Text)
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"service_uuid": ServiceUUIDPrimary,
-			"char_uuid":    CharWriteUUID,
-			"hex":          hex.EncodeToString(rawBytes),
-			"length":       len(rawBytes),
-		})
-	})
-
-	// 5. Embedded Static Web Assets
+	// 4. Embedded Static Web Assets
 	subFS, err := fs.Sub(embeddedWebFS, "web")
 	if err != nil {
 		log.Fatalf("Failed to create sub filesystem from embedded web: %v", err)

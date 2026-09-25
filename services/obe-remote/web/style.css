@@ -38,7 +38,7 @@ body {
   max-height: 920px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: space-evenly;
   padding: max(16px, env(safe-area-inset-top, 16px)) 24px max(24px, env(safe-area-inset-bottom, 16px));
   position: relative;
 }
@@ -283,51 +283,6 @@ body {
   align-items: center;
 }
 
-/* Footer & Text Input */
-.remote-footer {
-  margin-top: 12px;
-  padding: 0 4px;
-}
-
-.text-input-bar {
-  display: flex;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 6px 8px 6px 14px;
-  border-radius: 24px;
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-subtle);
-}
-
-.text-input-bar input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.text-input-bar input::placeholder {
-  color: var(--text-secondary);
-}
-
-.btn-send {
-  background: var(--accent-orange-gradient);
-  color: #fff;
-  border: none;
-  border-radius: 18px;
-  padding: 6px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.1s ease;
-}
-
-.btn-send:active {
-  transform: scale(0.94);
-}
-
 /* Modal */
 .modal-backdrop {
   position: fixed;
@@ -388,6 +343,29 @@ body {
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0 4px;
+}
+
+.current-device-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-secondary, #f2f3f5);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.btn-secondary {
+  background: none;
+  border: 1px solid var(--text-secondary);
+  color: var(--text-secondary);
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .scan-action-bar {

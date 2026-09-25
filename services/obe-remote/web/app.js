@@ -15,8 +15,6 @@
   const statusBadge = document.getElementById('btn-device-status');
   const statusText = document.getElementById('status-text');
   const deviceHint = document.getElementById('device-hint');
-  const textInput = document.getElementById('text-input');
-  const btnSendText = document.getElementById('btn-send-text');
 
   // Modal Elements
   const deviceModal = document.getElementById('device-modal');
@@ -24,16 +22,16 @@
   const btnScan = document.getElementById('btn-scan');
   const scanStatusText = document.getElementById('scan-status-text');
   const deviceList = document.getElementById('device-list');
-
-  // Audio Elements
-  const audioSuccess = document.getElementById('audio-success');
-  const audioFail = document.getElementById('audio-fail');
+  const currentDeviceBar = document.getElementById('current-device-bar');
+  const currentDeviceText = document.getElementById('current-device-text');
+  const btnDisconnect = document.getElementById('btn-disconnect');
 
   // State
   let isConnected = false;
-  let currentDeviceName = '';
-  let currentDeviceAddress = '';
   let discoveredDevices = new Map();
+  let lastKnownDevice = { address: '', name: '' };
+  let reconnectTimeoutId = null;
+  const RECONNECT_TIMEOUT_MS = 6000;
 
   function playHaptic() {
     try {
@@ -45,23 +43,42 @@
     } catch (_) {}
   }
 
-  function playAudio(success = true) {
+  // Soft click tone via Web Audio API — no asset, no native bridge needed.
+  let audioCtx = null;
+  function playClick() {
     try {
-      const audio = success ? audioSuccess : audioFail;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch(() => {});
-      }
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 700;
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.06);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.06);
     } catch (_) {}
   }
 
   // Check Generic Native Driver
   const hasNativeBridge = () => typeof window.SidecarBle !== 'undefined';
 
+  // Best-effort silent reconnect so a button press works even if the
+  // on-load auto-reconnect hasn't kicked in yet (e.g. app resumed from
+  // background). No-op if already connected/connecting or no saved device.
+  function ensureConnected() {
+    if (!isConnected && !reconnectTimeoutId && lastKnownDevice.address) {
+      reconnectLastDevice();
+    }
+  }
+
   // Key Send Handler (Generates OBE 2-byte frame: [keyCode, action])
   function sendKey(code, keyName, holdMs = 80) {
+    ensureConnected();
     playHaptic();
-    playAudio(true);
+    playClick();
 
     const intCode = parseInt(code, 10);
     const hexCode = intCode.toString(16).padStart(2, '0');
@@ -93,36 +110,6 @@
     });
   }
 
-  // Text Send Handler (Encodes string as UTF-8 hex)
-  function sendText(text) {
-    if (!text || text.trim() === '') return;
-    playHaptic();
-    playAudio(true);
-
-    if (hasNativeBridge()) {
-      try {
-        const utf8Bytes = new TextEncoder().encode(text);
-        const hexString = Array.from(utf8Bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, hexString);
-        textInput.value = '';
-        return;
-      } catch (e) {
-        console.error('SidecarBle.write text error:', e);
-      }
-    }
-
-    // HTTP Fallback
-    fetch('/api/text-frame', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
-    }).then(() => {
-      textInput.value = '';
-    }).catch(err => {
-      console.warn('HTTP text-frame failed:', err);
-    });
-  }
-
   // Connection & Scan Handlers
   function startScan() {
     discoveredDevices.clear();
@@ -132,8 +119,12 @@
 
     if (hasNativeBridge()) {
       try {
-        // Pass OBE service UUID filter to generic scanner
-        window.SidecarBle.scan(OBE_SERVICE_UUID, 10000);
+        // No hardware-level UUID filter: many BLE peripherals (this projector
+        // included) only expose their service UUID in the scan response, which
+        // Android's native ScanFilter unreliably matches on some OEM chipsets.
+        // Filtering happens in software below (onDeviceFound), matching the
+        // behavior of the original working implementation.
+        window.SidecarBle.scan(null, 10000);
         return;
       } catch (e) {
         console.error('SidecarBle.scan error:', e);
@@ -146,6 +137,7 @@
 
   function connectDevice(address, name) {
     scanStatusText.textContent = `正在连接 ${name || address}...`;
+    deviceHint.textContent = `正在连接 ${name || address}...`;
     if (hasNativeBridge()) {
       try {
         window.SidecarBle.connect(address);
@@ -153,6 +145,34 @@
         console.error('SidecarBle.connect error:', e);
         scanStatusText.textContent = '连接失败: ' + e.message;
       }
+    }
+  }
+
+  // Reconnect to the previously used device without scanning. Falls back to
+  // opening the scan modal if it doesn't connect within RECONNECT_TIMEOUT_MS
+  // (device off/out of range/replaced).
+  function reconnectLastDevice() {
+    clearTimeout(reconnectTimeoutId);
+    connectDevice(lastKnownDevice.address, lastKnownDevice.name);
+    reconnectTimeoutId = setTimeout(() => {
+      reconnectTimeoutId = null;
+      if (!isConnected) {
+        deviceModal.classList.add('show');
+        startScan();
+      }
+    }, RECONNECT_TIMEOUT_MS);
+  }
+
+  function openScanModal() {
+    clearTimeout(reconnectTimeoutId);
+    reconnectTimeoutId = null;
+    deviceModal.classList.add('show');
+    if (isConnected) {
+      // Already connected: don't interrupt the active link with a scan.
+      // User can hit "开始扫描" explicitly to look for another device.
+      scanStatusText.textContent = '点击"开始扫描"以更换设备';
+    } else {
+      startScan();
     }
   }
 
@@ -192,8 +212,6 @@
 
   function updateStatusUI(connected, name = '', address = '') {
     isConnected = connected;
-    currentDeviceName = name;
-    currentDeviceAddress = address;
 
     if (connected) {
       statusBadge.classList.add('connected');
@@ -201,11 +219,14 @@
       statusText.textContent = name || '已连接';
       deviceHint.textContent = `${name || '投影仪'} (${address})`;
       scanStatusText.textContent = '已连接到 ' + (name || address);
+      currentDeviceText.textContent = `当前已连接: ${name || address}`;
+      currentDeviceBar.hidden = false;
     } else {
       statusBadge.classList.remove('connected');
       statusBadge.classList.add('disconnected');
       statusText.textContent = '未连接';
       deviceHint.textContent = '点击右上角连接设备';
+      currentDeviceBar.hidden = true;
     }
   }
 
@@ -215,7 +236,7 @@
       const lower = (name || '').toLowerCase();
       const isObe = lower.includes('obe') || lower.includes('orange') || lower.includes('大眼橙') ||
                     (uuidsJson && uuidsJson.toLowerCase().includes('fff0'));
-      if (isObe || name) {
+      if (isObe) {
         discoveredDevices.set(address, {
           name: name || '大眼橙投影仪',
           address: address,
@@ -234,6 +255,9 @@
     onConnectionStateChange: function (connected, name, address) {
       updateStatusUI(connected, name, address);
       if (connected) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+        lastKnownDevice = { address: address, name: name };
         deviceModal.classList.remove('show');
       }
     }
@@ -260,27 +284,16 @@
     btn.addEventListener('pointerleave', releaseHandler);
   });
 
-  // Text Input
-  btnSendText.addEventListener('click', () => {
-    sendText(textInput.value);
-  });
-
-  textInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      sendText(textInput.value);
-    }
-  });
-
-  // Status Badge Click -> Open Modal
+  // Status Badge always opens the device modal: connected shows the current
+  // device with a disconnect option, disconnected goes straight into scanning.
+  // Actual key sends reconnect the known device on their own (ensureConnected),
+  // so this is purely for managing/switching devices.
   statusBadge.addEventListener('click', () => {
-    if (isConnected) {
-      if (confirm(`当前已连接 ${currentDeviceName || currentDeviceAddress}，是否断开？`)) {
-        disconnectDevice();
-      }
-    } else {
-      deviceModal.classList.add('show');
-      startScan();
-    }
+    openScanModal();
+  });
+
+  btnDisconnect.addEventListener('click', () => {
+    disconnectDevice();
   });
 
   btnCloseModal.addEventListener('click', () => {
@@ -296,8 +309,6 @@
 
   // Keyboard Navigation
   window.addEventListener('keydown', (e) => {
-    if (document.activeElement === textInput) return;
-
     let targetId = null;
     switch (e.key) {
       case 'ArrowUp': targetId = 'key-up'; break;
@@ -342,9 +353,12 @@
           const s = JSON.parse(statusJson);
           updateStatusUI(s.connected, s.name, s.address);
 
-          // Auto-reconnect last device if saved
-          if (!s.connected && s.lastAddress) {
-            connectDevice(s.lastAddress, s.lastName);
+          if (s.connected) {
+            lastKnownDevice = { address: s.address, name: s.name };
+          } else if (s.lastAddress) {
+            // Auto-reconnect to the previously used device instead of scanning
+            lastKnownDevice = { address: s.lastAddress, name: s.lastName };
+            reconnectLastDevice();
           }
         }
       } catch (e) {

@@ -33,3 +33,5 @@ node_modules/
 
 # Local service caches
 .obe_device.json
+
+wxapkg/
