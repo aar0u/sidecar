@@ -78,7 +78,6 @@ object ProcessManager {
                 Pair(cachedBinary, true)
             }
 
-            binaryToRun.setExecutable(true, false)
             onProgress("Starting ${service.name} service…")
             startProcess(context, service, binaryToRun, useLinker)
 
@@ -140,6 +139,7 @@ object ProcessManager {
         binary: File,
         useLinker: Boolean
     ) {
+        binary.setExecutable(true, false)
         val serviceId = service.id
         val workDir = File(File(context.filesDir, "services"), serviceId).apply {
             if (!exists()) mkdirs()
