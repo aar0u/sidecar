@@ -1,6 +1,8 @@
 package com.github.aar0u.sidecar
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.Color
@@ -11,6 +13,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.github.aar0u.sidecar.core.ConfigManager
 import com.github.aar0u.sidecar.core.ProcessManager
@@ -35,6 +39,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    1002
+                )
+            }
+        }
 
         binding.btnRefreshConfig.setOnClickListener {
             refreshRemoteConfig(force = true)
@@ -184,10 +199,16 @@ class MainActivity : AppCompatActivity() {
 
         card.btnStop.setOnClickListener {
             ProcessManager.stop(service.id)
+            if (service.keepAlive) {
+                SidecarDaemonService.stopForegroundForService(this, service.id)
+            }
             bindServiceCard(card, service)
         }
 
         ProcessManager.setOnStoppedListener(service.id) {
+            if (service.keepAlive) {
+                SidecarDaemonService.stopForegroundForService(this, service.id)
+            }
             runOnUiThread { bindServiceCard(card, service) }
         }
 
@@ -203,6 +224,9 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 result.onSuccess { url ->
+                    if (service.keepAlive) {
+                        SidecarDaemonService.startForegroundForService(this@MainActivity, service)
+                    }
                     bindServiceCard(card, service)
                     openWebView(service, url)
                 }.onFailure { e ->
@@ -223,6 +247,9 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = ProcessManager.start(this@MainActivity, service) { /* progress */ }
             result.onSuccess { url ->
+                if (service.keepAlive) {
+                    SidecarDaemonService.startForegroundForService(this@MainActivity, service)
+                }
                 openWebView(service, url)
             }.onFailure { e ->
                 Toast.makeText(this@MainActivity, "Failed to start ${service.name}: ${e.message}", Toast.LENGTH_LONG).show()
@@ -233,10 +260,12 @@ class MainActivity : AppCompatActivity() {
     private fun openWebView(service: ServiceConfig, targetUrl: String = service.url) {
         startActivity(
             WebViewActivity.createIntent(
-                this,
-                targetUrl,
-                service.name,
-                service.keepScreenOn
+                context = this,
+                url = targetUrl,
+                title = service.name,
+                keepScreenOn = service.keepScreenOn,
+                serviceId = service.id,
+                keepAlive = service.keepAlive
             )
         )
     }

@@ -245,6 +245,7 @@ object ProcessManager {
             Thread.currentThread().interrupt()
             p.destroyForcibly()
         }
+        stoppedListeners[serviceId]?.invoke()
     }
 
     fun stopAll() {

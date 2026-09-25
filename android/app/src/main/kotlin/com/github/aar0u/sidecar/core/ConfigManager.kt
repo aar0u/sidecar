@@ -32,7 +32,8 @@ object ConfigManager {
             "args": ["web"],
             "port": 8080,
             "url": "http://localhost:8080",
-            "keepScreenOn": true
+            "keepScreenOn": true,
+            "keepAlive": true
         },
         {
             "id": "obe-remote",
@@ -43,7 +44,8 @@ object ConfigManager {
             "args": [],
             "port": 8081,
             "url": "http://localhost:8081",
-            "keepScreenOn": true
+            "keepScreenOn": true,
+            "keepAlive": false
         }
     ]"""
 

@@ -13,7 +13,8 @@ data class ServiceConfig(
     val args: List<String> = emptyList(),
     val port: Int = 8080,
     val url: String = "http://localhost:$port",
-    val keepScreenOn: Boolean = true
+    val keepScreenOn: Boolean = true,
+    val keepAlive: Boolean = false
 ) : Serializable {
 
     companion object {
@@ -35,7 +36,8 @@ data class ServiceConfig(
                 args = argsList,
                 port = port,
                 url = json.optString("url", "http://localhost:$port"),
-                keepScreenOn = json.optBoolean("keepScreenOn", true)
+                keepScreenOn = json.optBoolean("keepScreenOn", true),
+                keepAlive = json.optBoolean("keepAlive", false)
             )
         }
     }
@@ -49,6 +51,7 @@ data class ServiceConfig(
         put("port", port)
         put("url", url)
         put("keepScreenOn", keepScreenOn)
+        put("keepAlive", keepAlive)
         put("args", JSONArray(args))
     }
 }

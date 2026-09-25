@@ -23,16 +23,22 @@ class WebViewActivity : AppCompatActivity() {
         const val EXTRA_URL = "extra_url"
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_KEEP_SCREEN_ON = "extra_keep_screen_on"
+        const val EXTRA_SERVICE_ID = "extra_service_id"
+        const val EXTRA_KEEP_ALIVE = "extra_keep_alive"
 
         fun createIntent(
             context: Context,
             url: String,
             title: String,
-            keepScreenOn: Boolean = true
+            keepScreenOn: Boolean = true,
+            serviceId: String? = null,
+            keepAlive: Boolean = false
         ): Intent = Intent(context, WebViewActivity::class.java).apply {
             putExtra(EXTRA_URL, url)
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_KEEP_SCREEN_ON, keepScreenOn)
+            putExtra(EXTRA_SERVICE_ID, serviceId)
+            putExtra(EXTRA_KEEP_ALIVE, keepAlive)
         }
     }
 
@@ -132,6 +138,12 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        val serviceId = intent.getStringExtra(EXTRA_SERVICE_ID)
+        val keepAlive = intent.getBooleanExtra(EXTRA_KEEP_ALIVE, false)
+        if (!serviceId.isNullOrEmpty() && !keepAlive) {
+            android.util.Log.i("WebViewActivity", "Service $serviceId is keepAlive=false, stopping process on Web UI exit...")
+            com.github.aar0u.sidecar.core.ProcessManager.stop(serviceId)
+        }
         bleBridge?.destroy()
         bleBridge = null
         binding.webView.destroy()
