@@ -53,8 +53,7 @@
   "binaryName": "obe-remote",
   "args": [],
   "port": 8081,
-  "url": "http://localhost:8081",
-  "keepAlive": false
+  "url": "http://localhost:8081"
 }
 ```
 

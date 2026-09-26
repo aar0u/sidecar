@@ -13,7 +13,6 @@ data class ServiceConfig(
     val args: List<String> = emptyList(),
     val port: Int = 8080,
     val url: String = "http://localhost:$port",
-    val keepAlive: Boolean = false,
     val requiresBootstrapConfig: Boolean = false,
     val bootstrapConfigFileName: String = "runtime.json"
 ) : Serializable {
@@ -37,7 +36,6 @@ data class ServiceConfig(
                 args = argsList,
                 port = port,
                 url = json.optString("url", "http://localhost:$port"),
-                keepAlive = json.optBoolean("keepAlive", false),
                 requiresBootstrapConfig = json.optBoolean("requiresBootstrapConfig", false),
                 bootstrapConfigFileName = json.optString("bootstrapConfigFileName", "runtime.json")
             )
@@ -52,7 +50,6 @@ data class ServiceConfig(
         put("binaryName", binaryName)
         put("port", port)
         put("url", url)
-        put("keepAlive", keepAlive)
         put("requiresBootstrapConfig", requiresBootstrapConfig)
         put("bootstrapConfigFileName", bootstrapConfigFileName)
         put("args", JSONArray(args))

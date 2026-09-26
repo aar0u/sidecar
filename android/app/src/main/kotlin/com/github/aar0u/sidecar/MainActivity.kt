@@ -17,9 +17,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.github.aar0u.sidecar.core.BootstrapConfigManager
 import com.github.aar0u.sidecar.core.ConfigManager
 import com.github.aar0u.sidecar.core.ProcessManager
+import com.github.aar0u.sidecar.core.ServicePreferenceManager
 import com.github.aar0u.sidecar.core.SidecarDaemonService
 import com.github.aar0u.sidecar.databinding.ActivityMainBinding
 import com.github.aar0u.sidecar.databinding.DialogBootstrapConfigBinding
@@ -171,7 +171,22 @@ class MainActivity : AppCompatActivity() {
             card.btnStart.setOnClickListener {
                 openWebView(service)
             }
+            card.rowKeepAlive.visibility = View.GONE
             return
+        }
+
+        card.rowKeepAlive.visibility = View.VISIBLE
+        card.switchKeepAlive.setOnCheckedChangeListener(null)
+        card.switchKeepAlive.isChecked = ServicePreferenceManager.isKeepAliveEnabled(this, service.id)
+        card.switchKeepAlive.setOnCheckedChangeListener { _, checked ->
+            ServicePreferenceManager.setKeepAliveEnabled(this, service.id, checked)
+            if (ProcessManager.isRunning(service.id)) {
+                if (checked) {
+                    SidecarDaemonService.startForegroundForService(this, service)
+                } else {
+                    SidecarDaemonService.stopForegroundForService(this, service.id)
+                }
+            }
         }
 
         val isRunning = ProcessManager.isRunning(service.id)
@@ -235,21 +250,21 @@ class MainActivity : AppCompatActivity() {
 
         card.btnStop.setOnClickListener {
             ProcessManager.stop(service.id)
-            if (service.keepAlive) {
+            if (ServicePreferenceManager.isKeepAliveEnabled(this, service.id)) {
                 SidecarDaemonService.stopForegroundForService(this, service.id)
             }
             bindServiceCard(card, service)
         }
 
         ProcessManager.setOnStoppedListener(service.id) {
-            if (service.keepAlive) {
+            if (ServicePreferenceManager.isKeepAliveEnabled(this, service.id)) {
                 SidecarDaemonService.stopForegroundForService(this, service.id)
             }
             runOnUiThread { bindServiceCard(card, service) }
         }
 
         card.btnStart.setOnClickListener {
-            if (service.requiresBootstrapConfig && !BootstrapConfigManager.hasConfig(this, service.id)) {
+            if (service.requiresBootstrapConfig && !ServicePreferenceManager.hasBootstrapConfig(this, service.id)) {
                 showBootstrapConfigDialog(service) { startService(card, service) }
             } else {
                 startService(card, service)
@@ -269,7 +284,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             result.onSuccess { url ->
-                if (service.keepAlive) {
+                if (ServicePreferenceManager.isKeepAliveEnabled(this@MainActivity, service.id)) {
                     SidecarDaemonService.startForegroundForService(this@MainActivity, service)
                 }
                 bindServiceCard(card, service)
@@ -283,7 +298,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showBootstrapConfigDialog(service: ServiceConfig, onSaved: () -> Unit) {
         val binding = DialogBootstrapConfigBinding.inflate(LayoutInflater.from(this))
-        binding.etConfigJson.setText(BootstrapConfigManager.getConfigText(this, service.id) ?: "")
+        binding.etConfigJson.setText(ServicePreferenceManager.getBootstrapConfigText(this, service.id) ?: "")
 
         AlertDialog.Builder(this)
             .setTitle("Configure ${service.name} (${service.bootstrapConfigFileName})")
@@ -294,11 +309,11 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Config content is required", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                if (!BootstrapConfigManager.isValidJson(text)) {
+                if (!ServicePreferenceManager.isValidJson(text)) {
                     Toast.makeText(this, "Not valid JSON", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                BootstrapConfigManager.saveConfigText(this, service.id, text)
+                ServicePreferenceManager.saveBootstrapConfigText(this, service.id, text)
                 onSaved()
             }
             .setNegativeButton("Cancel", null)
@@ -315,7 +330,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = ProcessManager.start(this@MainActivity, service) { /* progress */ }
             result.onSuccess { url ->
-                if (service.keepAlive) {
+                if (ServicePreferenceManager.isKeepAliveEnabled(this@MainActivity, service.id)) {
                     SidecarDaemonService.startForegroundForService(this@MainActivity, service)
                 }
                 openWebView(service, url)
@@ -326,14 +341,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openWebView(service: ServiceConfig, targetUrl: String = service.url) {
-        android.util.Log.i("MainActivity", "openWebView: id=${service.id}, keepAlive=${service.keepAlive}, url=$targetUrl")
+        val keepAlive = ServicePreferenceManager.isKeepAliveEnabled(this, service.id)
+        android.util.Log.i("MainActivity", "openWebView: id=${service.id}, keepAlive=$keepAlive, url=$targetUrl")
         startActivity(
             WebViewActivity.createIntent(
                 context = this,
                 url = targetUrl,
                 title = service.name,
                 serviceId = service.id,
-                keepAlive = service.keepAlive
+                keepAlive = keepAlive
             )
         )
     }
@@ -341,11 +357,11 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (isFinishing) {
-            val keepAliveIds = currentServices.filter { it.keepAlive }.map { it.id }.toSet()
-            currentServices
-                .filterNot { it.keepAlive }
-                .forEach { ProcessManager.stop(it.id) }
-            if (keepAliveIds.none(ProcessManager::isRunning)) {
+            val (keepAliveServices, transientServices) = currentServices.partition {
+                ServicePreferenceManager.isKeepAliveEnabled(this, it.id)
+            }
+            transientServices.forEach { ProcessManager.stop(it.id) }
+            if (keepAliveServices.none { ProcessManager.isRunning(it.id) }) {
                 stopService(Intent(this, SidecarDaemonService::class.java))
             }
         }

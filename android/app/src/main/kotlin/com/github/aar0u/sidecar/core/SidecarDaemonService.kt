@@ -18,8 +18,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Background daemon & Foreground Service controller.
- * 1. Hosts Foreground Service notification for Mode 2 (keepAlive=true) services (e.g. oktv)
- *    to prevent Android LMK / background battery killer from terminating them.
+ * 1. Hosts Foreground Service notification for services the user has opted into keeping
+ *    alive (see ServicePreferenceManager), to prevent Android LMK / background battery
+ *    killer from terminating them.
  * 2. Provides quick notification action to Stop background services.
  * 3. Handles onTaskRemoved (swiped away from Recents) to ensure clean process teardown.
  */

@@ -65,8 +65,7 @@ Define services in a remote JSON file (hosted on GitHub or local server). New se
     "binaryName": "tv",
     "args": ["web"],
     "port": 8080,
-    "url": "http://localhost:8080",
-    "keepAlive": true
+    "url": "http://localhost:8080"
   },
   {
     "id": "obe-remote",
@@ -76,8 +75,7 @@ Define services in a remote JSON file (hosted on GitHub or local server). New se
     "binaryName": "obe-remote",
     "args": [],
     "port": 8081,
-    "url": "http://localhost:8081",
-    "keepAlive": false
+    "url": "http://localhost:8081"
   }
 ]
 ```
@@ -92,7 +90,11 @@ Define services in a remote JSON file (hosted on GitHub or local server). New se
 | `args` | `array` | Arguments passed to the executable. |
 | `port` | `integer`| Port for HTTP health probing. |
 | `url` | `string` | Web interface URL loaded into the WebView. |
-| `keepAlive`   | `boolean`| If `false` (default, Mode 1), automatically stops process on Web UI exit. If `true` (Mode 2), promotes to an Android Foreground Service with a persistent status bar notification to survive app switching. |
+
+Whether a service survives backgrounding ("Keep running in background") is a per-device user
+preference toggled on each service's card, not a `services.json` field — it's a personal runtime
+choice, not a fact about the service. Off by default (Mode 1: stops on Web UI exit); on promotes
+it to an Android Foreground Service with a persistent status bar notification (Mode 2).
 
 ## Hardware Abstraction Layer (HAL)
 

@@ -8,7 +8,6 @@
     "args": ["web"],
     "port": 8080,
     "url": "http://localhost:8080",
-    "keepAlive": true,
     "requiresBootstrapConfig": true
   },
   {
@@ -19,7 +18,6 @@
     "binaryName": "obe-remote",
     "args": [],
     "port": 8081,
-    "url": "http://localhost:8081",
-    "keepAlive": false
+    "url": "http://localhost:8081"
   }
 ]

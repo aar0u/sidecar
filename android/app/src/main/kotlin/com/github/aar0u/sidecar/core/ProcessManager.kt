@@ -164,7 +164,7 @@ object ProcessManager {
         }
 
         if (service.requiresBootstrapConfig) {
-            BootstrapConfigManager.writeConfigFile(context, service, workDir)
+            ServicePreferenceManager.writeBootstrapConfigFile(context, service, workDir)
         }
 
         val cmd = mutableListOf<String>()
