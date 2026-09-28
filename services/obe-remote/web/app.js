@@ -74,26 +74,21 @@
     }
   }
 
-  // Key Send Handler (Generates OBE 2-byte frame: [keyCode, action])
-  function sendKey(code, keyName, holdMs = 80) {
-    ensureConnected();
-    playHaptic();
-    playClick();
+  // Key Press State & Safety Constants
+  let activePress = null;
+  const MIN_HOLD_MS = 80;     // Ensures short tap registers properly on projector firmware
+  const MAX_HOLD_MS = 10000;  // 10s safety auto-release to prevent stuck keys on missed events
 
+  // Raw OBE Protocol BLE Frame Sender ([keyCode, 0x00=press / 0x01=release])
+  function sendRawAction(code, actionByte) {
     const intCode = parseInt(code, 10);
     const hexCode = intCode.toString(16).padStart(2, '0');
-    const pressHex = hexCode + "00";
-    const releaseHex = hexCode + "01";
+    const actionHex = actionByte === 0 ? "00" : "01";
+    const payloadHex = hexCode + actionHex;
 
     if (hasNativeBridge()) {
       try {
-        // 1. Send Press Frame
-        window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, pressHex);
-
-        // 2. Send Release Frame after holdMs
-        setTimeout(() => {
-          window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, releaseHex);
-        }, holdMs);
+        window.SidecarBle.write(OBE_SERVICE_UUID, OBE_CHAR_WRITE_UUID, payloadHex);
         return;
       } catch (e) {
         console.error('SidecarBle.write error:', e);
@@ -104,10 +99,85 @@
     fetch('/api/frame', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: intCode, key: keyName, hold_ms: holdMs })
+      body: JSON.stringify({
+        code: intCode,
+        action: actionByte === 0 ? 'press' : 'release'
+      })
     }).catch(err => {
       console.warn('HTTP frame request failed:', err);
     });
+  }
+
+  function pressKey(code, keyName) {
+    if (activePress) {
+      forceReleaseActiveKey();
+    }
+
+    ensureConnected();
+    playHaptic();
+    playClick();
+
+    sendRawAction(code, 0); // 0x00: Press
+
+    activePress = {
+      code: code,
+      keyName: keyName,
+      pressTime: Date.now(),
+      pendingReleaseTimer: null,
+      maxHoldTimer: setTimeout(() => {
+        forceReleaseActiveKey();
+      }, MAX_HOLD_MS)
+    };
+  }
+
+  function releaseKey(code, keyName) {
+    if (!activePress) return;
+    if (code !== undefined && code !== null && String(activePress.code) !== String(code)) {
+      return;
+    }
+
+    const current = activePress;
+    activePress = null;
+
+    if (current.maxHoldTimer) {
+      clearTimeout(current.maxHoldTimer);
+      current.maxHoldTimer = null;
+    }
+
+    const elapsed = Date.now() - current.pressTime;
+    const remainingHold = MIN_HOLD_MS - elapsed;
+
+    if (remainingHold > 0) {
+      // Short tap: delay release slightly so hardware reliably registers single press
+      current.pendingReleaseTimer = setTimeout(() => {
+        sendRawAction(current.code, 1); // 0x01: Release
+      }, remainingHold);
+    } else {
+      // Long press: release immediately on pointer/key up
+      sendRawAction(current.code, 1); // 0x01: Release
+    }
+  }
+
+  function forceReleaseActiveKey() {
+    if (!activePress) return;
+    const current = activePress;
+    activePress = null;
+
+    if (current.maxHoldTimer) clearTimeout(current.maxHoldTimer);
+    if (current.pendingReleaseTimer) clearTimeout(current.pendingReleaseTimer);
+
+    const allBtns = document.querySelectorAll('[data-code]');
+    allBtns.forEach(btn => btn.classList.remove('pressed'));
+
+    sendRawAction(current.code, 1);
+  }
+
+  // Backward compatible one-shot send
+  function sendKey(code, keyName, holdMs = 80) {
+    pressKey(code, keyName);
+    setTimeout(() => {
+      releaseKey(code, keyName);
+    }, holdMs);
   }
 
   // Connection & Scan Handlers
@@ -263,25 +333,48 @@
     }
   };
 
-  // Wire Key Buttons
+  // Wire Key Buttons with pointer capture & press/release lifecycle
   const allButtons = document.querySelectorAll('[data-code]');
   allButtons.forEach(btn => {
     const code = btn.dataset.code;
     const keyName = btn.dataset.key;
 
     btn.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
       e.preventDefault();
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch (_) {}
       btn.classList.add('pressed');
-      sendKey(code, keyName);
+      pressKey(code, keyName);
     });
 
-    const releaseHandler = () => {
+    const releaseHandler = (e) => {
       btn.classList.remove('pressed');
+      try {
+        if (btn.hasPointerCapture && btn.hasPointerCapture(e.pointerId)) {
+          btn.releasePointerCapture(e.pointerId);
+        }
+      } catch (_) {}
+      releaseKey(code, keyName);
     };
 
     btn.addEventListener('pointerup', releaseHandler);
     btn.addEventListener('pointercancel', releaseHandler);
-    btn.addEventListener('pointerleave', releaseHandler);
+    btn.addEventListener('pointerleave', (e) => {
+      // If pointer is captured, leave event does not release until pointerup.
+      // If pointerCapture not supported, release safely on leave.
+      if (!btn.hasPointerCapture || !btn.hasPointerCapture(e.pointerId)) {
+        releaseHandler(e);
+      }
+    });
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+
+  // Global blur / page visibility loss failsafe
+  window.addEventListener('blur', forceReleaseActiveKey);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) forceReleaseActiveKey();
   });
 
   // Status Badge always opens the device modal: connected shows the current
@@ -307,8 +400,8 @@
     startScan();
   });
 
-  // Keyboard Navigation
-  window.addEventListener('keydown', (e) => {
+  // Keyboard Navigation (Press on KeyDown, Release on KeyUp)
+  function getButtonForKeyboardEvent(e) {
     let targetId = null;
     switch (e.key) {
       case 'ArrowUp': targetId = 'key-up'; break;
@@ -332,15 +425,29 @@
       case '=': targetId = 'key-vol-up'; break;
       case '-': targetId = 'key-vol-down'; break;
     }
+    return targetId ? document.getElementById(targetId) : null;
+  }
 
-    if (targetId) {
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) {
+      // OS keyboard repeat event, keep hardware hold state active
       e.preventDefault();
-      const btn = document.getElementById(targetId);
-      if (btn) {
-        btn.classList.add('pressed');
-        sendKey(btn.dataset.code, btn.dataset.key);
-        setTimeout(() => btn.classList.remove('pressed'), 120);
-      }
+      return;
+    }
+    const btn = getButtonForKeyboardEvent(e);
+    if (btn) {
+      e.preventDefault();
+      btn.classList.add('pressed');
+      pressKey(btn.dataset.code, btn.dataset.key);
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    const btn = getButtonForKeyboardEvent(e);
+    if (btn) {
+      e.preventDefault();
+      btn.classList.remove('pressed');
+      releaseKey(btn.dataset.code, btn.dataset.key);
     }
   });
 

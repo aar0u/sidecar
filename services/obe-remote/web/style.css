@@ -139,6 +139,8 @@ body {
   align-items: center;
   justify-content: center;
   outline: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
   transition: transform 0.08s ease;
 }
 
@@ -194,6 +196,8 @@ body {
   padding: 0;
   cursor: pointer;
   outline: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .dpad-arrow:active,
@@ -251,6 +255,8 @@ body {
   padding: 0;
   cursor: pointer;
   outline: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
   transition: transform 0.08s ease;
 }
 

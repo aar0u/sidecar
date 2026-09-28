@@ -71,6 +71,7 @@ type FrameRequest struct {
 	Code    int    `json:"code"`
 	HoldMs  int    `json:"hold_ms"`
 	Repeat  int    `json:"repeat"`
+	Action  string `json:"action,omitempty"` // "press", "release", or tap ("")
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -149,6 +150,27 @@ func main() {
 
 		if code == 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Unknown or missing key code"})
+			return
+		}
+
+		// Direct press / release frame generation for hold/longpress support
+		if req.Action == "press" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"service_uuid": ServiceUUIDPrimary,
+				"char_uuid":    CharWriteUUID,
+				"frames": []Frame{
+					{Hex: hex.EncodeToString([]byte{code, ActionPress})},
+				},
+			})
+			return
+		} else if req.Action == "release" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"service_uuid": ServiceUUIDPrimary,
+				"char_uuid":    CharWriteUUID,
+				"frames": []Frame{
+					{Hex: hex.EncodeToString([]byte{code, ActionRelease})},
+				},
+			})
 			return
 		}
 
