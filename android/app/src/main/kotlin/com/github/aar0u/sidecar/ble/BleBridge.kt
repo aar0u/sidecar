@@ -10,6 +10,9 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -69,6 +72,7 @@ class BleBridge(
     private var currentDeviceName: String = ""
     private var currentDeviceAddress: String = ""
     private var isScanning: Boolean = false
+    private var advertiseCallback: AdvertiseCallback? = null
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
@@ -153,7 +157,8 @@ class BleBridge(
     fun hasPermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
         } else {
             ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -164,7 +169,8 @@ class BleBridge(
         val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_ADVERTISE
             )
         } else {
             arrayOf(
@@ -239,6 +245,43 @@ class BleBridge(
                 evalJs("window.SidecarBleCallbacks && window.SidecarBleCallbacks.onScanFinished();")
             }
         }
+    }
+
+    /** Broadcasts a connectable advertisement carrying only manufacturer data, for [durationMs] (max 180 s). */
+    @JavascriptInterface
+    fun advertise(companyId: Int, hexData: String, durationMs: Long): Boolean {
+        if (!hasPermissions()) {
+            mainHandler.post { requestPermissions() }
+            return false
+        }
+        val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser ?: return false
+        stopAdvertise()
+
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setConnectable(true)
+            .setTimeout(durationMs.coerceIn(1L, 180_000L).toInt())
+            .build()
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(false)
+            .addManufacturerData(companyId, hexToBytes(hexData))
+            .build()
+        val callback = object : AdvertiseCallback() {
+            override fun onStartFailure(errorCode: Int) {
+                Log.e(TAG, "BLE advertise failed with error: $errorCode")
+                if (advertiseCallback === this) advertiseCallback = null
+            }
+        }
+        advertiseCallback = callback
+        advertiser.startAdvertising(settings, data, callback)
+        return true
+    }
+
+    @JavascriptInterface
+    fun stopAdvertise() {
+        advertiseCallback?.let { bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(it) }
+        advertiseCallback = null
     }
 
     @JavascriptInterface
@@ -362,6 +405,7 @@ class BleBridge(
 
     fun destroy() {
         stopScan()
+        stopAdvertise()
         disconnect()
     }
 

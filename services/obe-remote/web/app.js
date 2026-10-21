@@ -11,6 +11,13 @@
   const OBE_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
   const OBE_CHAR_WRITE_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
 
+  // Standby wake: the projector's BT chip wakes on a broadcast carrying this manufacturer data
+  // (the bytes the bonded remote advertises after a key press); no connection is needed.
+  const POWER_KEY_CODE = '26';
+  const WAKE_COMPANY_ID = 0x0000;
+  const WAKE_DATA_HEX = "82b0d292a0a861";
+  const WAKE_ADVERTISE_MS = 15000;
+
   // Elements
   const statusBadge = document.getElementById('btn-device-status');
   const statusText = document.getElementById('status-text');
@@ -113,10 +120,20 @@
       forceReleaseActiveKey();
     }
 
-    ensureConnected();
     playHaptic();
     playClick();
 
+    // No GATT link means the projector is in standby (or unreachable), so a power press wakes it.
+    if (String(code) === POWER_KEY_CODE && !isConnected && hasNativeBridge()) {
+      try {
+        window.SidecarBle.advertise(WAKE_COMPANY_ID, WAKE_DATA_HEX, WAKE_ADVERTISE_MS);
+        return;
+      } catch (e) {
+        console.error('SidecarBle.advertise error:', e);
+      }
+    }
+
+    ensureConnected();
     sendRawAction(code, 0); // 0x00: Press
 
     activePress = {
